@@ -20,6 +20,25 @@
             </plugin>
         </plugins>
     </build>
+<dependencies>
+    <dependency>
+        <groupId>com.neuronrobotics</groupId>
+        <artifactId>nrjavaserial</artifactId>
+        <version>3.13.0</version>
+    </dependency>
+    <dependency>
+        <groupId>org.openmuc</groupId>
+        <artifactId>jsml</artifactId>
+        <version>1.1.1</version>
+        <exclusions>
+            <exclusion>
+                <groupId>org.openmuc</groupId>
+                <artifactId>jrxtx</artifactId>
+            </exclusion>
+        </exclusions>
+    </dependency>
+</dependencies>
+
 
 </project>
 
