@@ -59,7 +59,7 @@ public class Datenbank {
 
     }
 
-    public List<Meter> timeInterval(long b, long c, MeterReader meterReader) throws SQLException {
+    public List<Meter> timeInterval(long b, long c) throws SQLException {
         PreparedStatement ps = this.connection.prepareStatement("SELECT * FROM meter_data WHERE \"current_time\" BETWEEN ? AND ? ORDER BY \"current_time\" asc");
         ps.setLong(1, b);
         ps.setLong(2, c);

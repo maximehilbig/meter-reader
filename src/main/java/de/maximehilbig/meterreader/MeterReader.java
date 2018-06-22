@@ -5,65 +5,64 @@ import org.openmuc.jsml.structures.*;
 import org.openmuc.jsml.structures.responses.SmlGetListRes;
 import org.openmuc.jsml.transport.MessageExtractor;
 
-import javax.print.DocFlavor;
 import javax.xml.bind.DatatypeConverter;
-import java.awt.*;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.SQLOutput;
 import java.util.List;
 import java.util.Scanner;
 import java.util.Set;
 
 public class MeterReader {
 
-    public static void main(String[] args) throws IOException, SQLException {
+    private enum Mode {
+        READ_METER, READ_DATABASE
+    }
 
+    public static void main(String[] args) throws IOException, SQLException {
+        MeterReader meterReader = new MeterReader();
+        Datenbank database = meterReader.createDatabase();
+
+        Mode mode = meterReader.getMode();
+
+        switch (mode) {
+            case READ_METER:
+                meterReader.dataReader(database);
+                break;
+            case READ_DATABASE:
+                meterReader.databaseReader(database);
+                break;
+        }
+    }
+
+    private Datenbank createDatabase() throws SQLException {
         Datenbank datenbank = new Datenbank();
         datenbank.createConnection();
-        int a;
-        String x, y;
-        
-        Scanner eingabewert = new Scanner(System.in);
-        Scanner zeitintervallmin = new Scanner(System.in);
-        Scanner zeitintervallmax = new Scanner(System.in);
+        return datenbank;
+    }
 
-        MeterReader meterReader = new MeterReader();
+    private Mode getMode() {
+        Scanner eingabewert = new Scanner(System.in);
 
         System.out.println("Wenn sie die Daten lesen wollen, tippen sie 1 oder wenn Sie ein Zeitintervall eingeben möchten, tippen Sie 2:  ");
-        a = eingabewert.nextInt();
+
+        int a = eingabewert.nextInt();
         if (a < 2) {
-
-            meterReader.dataReader(datenbank);
-
+            return Mode.READ_METER;
         } else {
-            System.out.println("Geben Sie ihr gewünschtes Zeitintervall ein.");
-            System.out.println("Zeitintervallmin: ");
-            x = zeitintervallmin.nextLine();
-            long b = datenbank.conversion(x);
-            System.out.println("Zeitintervallmax: ");
-            y = zeitintervallmax.nextLine();
-            long c = datenbank.conversion(y);
-            List <Meter> meters = datenbank.timeInterval(b, c, meterReader);
-            datenbank.mean(meters);
-            datenbank.wastage(meters);
-
+            return Mode.READ_DATABASE;
         }
     }
 
 
-    public void dataReader(Datenbank datenbank) throws IOException, SQLException {
-
-
-        InputStream stream = MeterReader.selectInputStream();
+    private void dataReader(Datenbank datenbank) throws IOException, SQLException {
+        InputStream stream = selectInputStream();
 
         BufferedInputStream bis = new BufferedInputStream(stream);
         DataInputStream dis = new DataInputStream(bis);
-        while (true) {
 
+        while (true) {
             MessageExtractor messageExtractor = new MessageExtractor(dis, 3000);
 
             byte[] smlFile = messageExtractor.getSmlMessage();
@@ -78,7 +77,8 @@ public class MeterReader {
                 message.decode(smlFileDis);
 
 
-                ASNObject obj = message.getMessageBody().getChoice();
+                ASNObject obj = message.getMessageBody()
+                        .getChoice();
                 if (obj instanceof SmlGetListRes) {
                     SmlGetListRes content = (SmlGetListRes) obj;
 //                    System.out.println(content.toString());
@@ -93,8 +93,10 @@ public class MeterReader {
                     double inputPower3 = -1;
 
                     for (SmlListEntry entry : entries) {
-                        String obisCode = getObisCode(entry.getObjName().getValue());
-                        ASNObject valueObj = entry.getValue().getChoice();
+                        String obisCode = getObisCode(entry.getObjName()
+                                .getValue());
+                        ASNObject valueObj = entry.getValue()
+                                .getChoice();
 
                         if (obisCode.equals("1-0:96.1.0*255")) {
                             //System.out.println("meterId:" + valueObj.toString());
@@ -139,17 +141,40 @@ public class MeterReader {
 
 
                     }
+
                     Meter meter = new Meter(System.currentTimeMillis(), inputMeterId, inputEnergy, inputPower, inputPower1, inputPower2, inputPower3);
                     System.out.println(meter);
                     datenbank.save(meter);
-
                 }
             }
         }
     }
 
+    private void databaseReader(Datenbank database) throws SQLException {
+        long[] interval = getTimeIntervalFromUser(database);
+        List<Meter> meters = database.timeInterval(interval[0], interval[1]);
+        database.mean(meters);
+        database.wastage(meters);
+    }
 
-    static InputStream selectInputStream() throws IOException {
+    private long[] getTimeIntervalFromUser(Datenbank datenbank) {
+        System.out.println("Geben Sie ihr gewünschtes Zeitintervall ein.");
+
+        long intervalStart = convert("Start: ", datenbank);
+        long intervalEnd = convert("End: ", datenbank);
+
+        return new long[]{intervalStart, intervalEnd};
+    }
+
+    private long convert(String text, Datenbank database) {
+        Scanner scanner = new Scanner(System.in);
+        System.out.println(text);
+        String y = scanner.nextLine();
+        return database.conversion(y);
+    }
+
+
+    private InputStream selectInputStream() throws IOException {
         Set<String> ports = NRSerialPort.getAvailableSerialPorts();
         InputStream inputStream;
         if (ports.size() != 0) {
@@ -164,13 +189,12 @@ public class MeterReader {
 
             inputStream = serialPort.getInputStream();
         } else {
-
             inputStream = Files.newInputStream(Paths.get("C:\\Users\\maxim\\IdeaProjects\\meterreader\\src\\main\\resources\\meter-data.out"));
         }
         return inputStream;
     }
 
-    static String getObisCode(byte[] bytes) {
+    private String getObisCode(byte[] bytes) {
 
 
         int arrayLength = bytes.length;
@@ -183,7 +207,7 @@ public class MeterReader {
 
     }
 
-    static String convertToString(byte[] bytes) {
+    private String convertToString(byte[] bytes) {
         StringBuilder builder = new StringBuilder();
         for (byte b : bytes) {
             builder.append(String.format("%02x", b));
@@ -193,7 +217,7 @@ public class MeterReader {
     }
 
 
-    static String convertToMeterId(String hexMeterId) {
+    private String convertToMeterId(String hexMeterId) {
         String sparte = hexMeterId.substring(3, 4);
 
         String hersteller = new String(DatatypeConverter.parseHexBinary(hexMeterId.substring(4, 10)));
@@ -210,9 +234,7 @@ public class MeterReader {
         String i = builder.toString();
         //System.out.println(i);
         return i;
-
     }
-
 }
 
 
